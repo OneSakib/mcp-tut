@@ -1,0 +1,13 @@
+# Testing
+uv run fastmcp dev main.py
+
+# Production
+uv run fastmcp run main.py
+
+# install on claude desktop
+uv run fastmcp install claude-desktop main.py
+
+
+
+# Check
+uv run python main.py
