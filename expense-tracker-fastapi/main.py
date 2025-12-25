@@ -1,13 +1,15 @@
-from fastmcp import FastMCP
+from fastapi import FastAPI, HTTPException
+
+from pydantic import BaseModel
 import os
 import sqlite3
+import json
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'expenses.db')
+BASE_DIR = os.path.dirname(__file__)
+DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
 
-CATEGORIES_FILE_PATH = os.path.join(
-    os.path.dirname(__file__), 'categories.json')
-mcp = FastMCP(name="Expense Tracker DB")
+app = FastAPI(title="Expense Tracker API")
 
 
 def init_db():
@@ -29,8 +31,16 @@ def init_db():
 init_db()
 
 
-@mcp.tool()
-def add_expenses(date: str, amount: float, category: str, sub_category: str = "", note: str = ""):
+class ExpenseCreate(BaseModel):
+    date: str
+    amount: float
+    category: str
+    sub_category: str | None = ""
+    note: str | None = ""
+
+
+@app.post("/expenses/")
+def add_expenses(payload: ExpenseCreate):
     '''
     Add Expensed in the DB
 
@@ -51,12 +61,12 @@ def add_expenses(date: str, amount: float, category: str, sub_category: str = ""
         cursor.execute('''
             INSERT INTO expenses (date, amount, category, sub_category, note)
             VALUES (?, ?, ?, ?, ?)
-        ''', (date, amount, category, sub_category, note))
+        ''', (payload.date, payload.amount, payload.category, payload.sub_category, payload.note))
         conn.commit()
         return {"status": "ok", "id": cursor.lastrowid}
 
 
-@mcp.tool()
+@app.get('/expenses')
 def list_expenses():
     '''
     List Expenses of Yours from the DB
@@ -69,7 +79,7 @@ def list_expenses():
         return {'status': 'ok', 'data': cursor.fetchall()}
 
 
-@mcp.tool()
+@app.get('/expenses/date-range/')
 def list_expenses_with_date(start_date: str, end_date: str):
     '''
     list of all expenses which comes bw these dates.
@@ -87,7 +97,7 @@ def list_expenses_with_date(start_date: str, end_date: str):
         return {'status': 'ok', 'data': cursor.fetchall()}
 
 
-@mcp.tool()
+@app.get('/expenses/summarize/')
 def summarize(start_date: str, end_date: str, category: str | None = None):
     '''
     Summarize all expenses which comes bw these dates.
@@ -98,7 +108,6 @@ def summarize(start_date: str, end_date: str, category: str | None = None):
     :type end_date: str
     '''
     with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
         query = ('''
             SELECT category, SUM(amount) AS total_amount from expenses WHERE date BETWEEN ? AND ?
         ''')
@@ -110,17 +119,3 @@ def summarize(start_date: str, end_date: str, category: str | None = None):
         cur = conn.execute(query, params)
         cols = [d[0] for d in cur.description]
         return {'data': [dict(zip(cols, r)) for r in cur.fetchall()]}
-
-
-@mcp.resource("expenses://categories", mime_type="application/json")
-def categories():
-    '''
-    Read fresh code each time you can edit the file without restarting
-
-    '''
-    with open(CATEGORIES_FILE_PATH, 'r', encoding='utf-8') as f:
-        return f.read()
-
-
-if __name__ == "__main__":
-    mcp.run()
